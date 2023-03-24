@@ -67,4 +67,5 @@ ext {
     espressoVersion = '3.5.0'
     firebaseAuthVersion='21.0.3'
     firebaseUiVersion='7.2.0'
+    easyPermissionVersion='3.0.0'
 }
