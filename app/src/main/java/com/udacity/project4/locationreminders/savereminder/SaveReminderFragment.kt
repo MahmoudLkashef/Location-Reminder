@@ -1,23 +1,21 @@
 package com.udacity.project4.locationreminders.savereminder
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context.LOCATION_SERVICE
 import android.content.Intent
+import android.content.IntentSender
 import android.location.LocationManager
-import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.databinding.DataBindingUtil
-import com.google.android.gms.location.Geofence
-import com.google.android.gms.location.GeofencingClient
-import com.google.android.gms.location.GeofencingRequest
-import com.google.android.gms.location.LocationServices
+import com.google.android.gms.common.api.ResolvableApiException
+import com.google.android.gms.location.*
 import com.udacity.project4.R
 import com.udacity.project4.base.BaseFragment
 import com.udacity.project4.base.NavigationCommand
@@ -27,10 +25,11 @@ import com.udacity.project4.locationreminders.reminderslist.ReminderDataItem
 import com.udacity.project4.utils.Constants
 import com.udacity.project4.utils.setDisplayHomeAsUpEnabled
 import org.koin.android.ext.android.inject
+import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
 import java.util.*
 
-class SaveReminderFragment : BaseFragment(),EasyPermissions.PermissionCallbacks {
+class SaveReminderFragment : BaseFragment(), EasyPermissions.PermissionCallbacks{
     private val TAG="SaveReminderFragment"
     //Get the view model this time as a single to be shared with the another fragment
     override val _viewModel: SaveReminderViewModel by inject()
@@ -115,7 +114,6 @@ class SaveReminderFragment : BaseFragment(),EasyPermissions.PermissionCallbacks 
             addOnFailureListener {
                 Log.e(TAG, "Failed to add geofence: ${it.message}")
                 Toast.makeText(requireContext(), "Failed to add geofence", Toast.LENGTH_SHORT).show()
-                checkLocationPermissionsAndAddGeofence()
             }
         }
     }
@@ -177,11 +175,23 @@ class SaveReminderFragment : BaseFragment(),EasyPermissions.PermissionCallbacks 
         return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
     }
 
-    private fun turnOnGps() {
-        val locationManager = context?.getSystemService(LOCATION_SERVICE) as LocationManager
-        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-            startActivity(intent)
+    private fun turnOnGps(){
+        val request = LocationRequest.create().apply {
+            priority = LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY
+        }
+        val builder = LocationSettingsRequest.Builder().addLocationRequest(request)
+        val client: SettingsClient = LocationServices.getSettingsClient(requireActivity())
+        val task= client.checkLocationSettings(builder.build())
+        task.addOnFailureListener {
+            if (it is ResolvableApiException) {
+                try {
+                    startIntentSenderForResult(it.resolution.intentSender, Constants.REQUEST_TURN_ON_GPS_CODE,null,0,0,0,null)
+                } catch (sendEx: IntentSender.SendIntentException) {
+                    Log.d(TAG, "Error getting location settings resolution: " + sendEx.message)
+                }
+            }
+        }.addOnSuccessListener {
+            addGeofence()
         }
     }
     override fun onRequestPermissionsResult(
@@ -193,13 +203,31 @@ class SaveReminderFragment : BaseFragment(),EasyPermissions.PermissionCallbacks 
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults,this)
     }
     override fun onPermissionsGranted(requestCode: Int, perms: MutableList<String>) {
-
-    }
-
-    override fun onPermissionsDenied(requestCode: Int, perms: MutableList<String>) {
         checkLocationPermissionsAndAddGeofence()
     }
 
+    override fun onPermissionsDenied(requestCode: Int, perms: MutableList<String>) {
+        when(requestCode){
+            Constants.REQUEST_BACKGROUND_LOCATION_PERMISSION_CODE->{
+                if(EasyPermissions.somePermissionPermanentlyDenied(this,perms)){
+                    AppSettingsDialog.Builder(this).build().show()
+                }
+                else requestForegroundAndBackgroundPermissions()
+            }
+            Constants.REQUEST_LOCATION_PERMISSION_CODE-> {
+                requestForegroundLocationPermission()
+            }
+        }
+    }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        // called after user returned from app settings screen
+        when(requestCode){
+            Constants.REQUEST_TURN_ON_GPS_CODE->{
+                if(resultCode==Activity.RESULT_OK)addGeofence()
+            }
+        }
+    }
     override fun onDestroy() {
         super.onDestroy()
         //make sure to clear the view model after destroy, as it's a single view model.

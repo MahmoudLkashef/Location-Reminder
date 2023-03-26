@@ -3,6 +3,7 @@ package com.udacity.project4.locationreminders.savereminder.selectreminderlocati
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.IntentSender
 import android.content.res.Resources
 import android.graphics.Color
 import android.location.Geocoder
@@ -17,6 +18,11 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.databinding.DataBindingUtil
+import com.google.android.gms.common.api.ResolvableApiException
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationSettingsRequest
+import com.google.android.gms.location.SettingsClient
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
@@ -211,6 +217,10 @@ class SelectLocationFragment : BaseFragment(),LocationListener,EasyPermissions.P
     private fun getCurrentLocation(){
         if(isForegroundLocationPermissionGranted()){
             map.isMyLocationEnabled=true
+            map.setOnMyLocationButtonClickListener {
+                if(!isGPSEnabled())turnOnGps()
+                false
+            }
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, Constants.MIN_TIME_UPDATES,
                 Constants.MIN_DISTANCE_UPDATES, this)
         }
@@ -220,6 +230,29 @@ class SelectLocationFragment : BaseFragment(),LocationListener,EasyPermissions.P
         val latLng=LatLng(location.latitude,location.longitude)
         val zoomLevel = 15f
         map.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoomLevel))
+    }
+
+    private fun isGPSEnabled(): Boolean {
+        val locationManager = context?.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+    }
+
+    private fun turnOnGps(){
+        val request = LocationRequest.create().apply {
+            priority = LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY
+        }
+        val builder = LocationSettingsRequest.Builder().addLocationRequest(request)
+        val client: SettingsClient = LocationServices.getSettingsClient(requireActivity())
+        val task= client.checkLocationSettings(builder.build())
+        task.addOnFailureListener {
+            if (it is ResolvableApiException) {
+                try {
+                    startIntentSenderForResult(it.resolution.intentSender, Constants.REQUEST_TURN_ON_GPS_CODE,null,0,0,0,null)
+                } catch (sendEx: IntentSender.SendIntentException) {
+                    Log.d(TAG, "Error getting location settings resolution: " + sendEx.message)
+                }
+            }
+        }
     }
     override fun onRequestPermissionsResult(
         requestCode: Int,
