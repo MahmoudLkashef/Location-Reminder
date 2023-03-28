@@ -226,6 +226,17 @@ class SelectLocationFragment : BaseFragment(),LocationListener,EasyPermissions.P
         }
         else requestForegroundLocationPermission()
     }
+    override fun onProviderEnabled(provider: String) {
+
+    }
+
+    override fun onProviderDisabled(provider: String) {
+
+    }
+
+    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
+
+    }
     override fun onLocationChanged(location: Location) {
         val latLng=LatLng(location.latitude,location.longitude)
         val zoomLevel = 15f
