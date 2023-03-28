@@ -226,6 +226,8 @@ class SelectLocationFragment : BaseFragment(),LocationListener,EasyPermissions.P
         }
         else requestForegroundLocationPermission()
     }
+    
+    // To support devices less than 29
     override fun onProviderEnabled(provider: String) {
 
     }
